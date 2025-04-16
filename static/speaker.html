@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speaker Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 0 10px;
+            cursor: pointer;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .recording {
+            background-color: #ff4444;
+            color: white;
+        }
+        .not-recording {
+            background-color: #44ff44;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <h1>Speaker Interface</h1>
+    <div class="controls">
+        <button id="startButton">Start Speaking</button>
+        <button id="stopButton" disabled>Stop Speaking</button>
+    </div>
+    <div id="status" class="status not-recording">Not Recording</div>
+
+    <script>
+        let audioContext;
+        let socket;
+        let processor;
+        let input;
+        let stream;
+    
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const status = document.getElementById('status');
+    
+        async function startRecording() {
+            socket = new WebSocket(`ws://${window.location.host}/ws/speaker`);
+            socket.binaryType = "arraybuffer";
+    
+            socket.onopen = async () => {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                input = audioContext.createMediaStreamSource(stream);
+    
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                input.connect(processor);
+                processor.connect(audioContext.destination);
+    
+                processor.onaudioprocess = function (e) {
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    const pcmData = convertFloat32ToInt16(inputData);
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(pcmData);
+                    }
+                };
+    
+                status.textContent = 'Recording...';
+                status.className = 'status recording';
+                startButton.disabled = true;
+                stopButton.disabled = false;
+            };
+    
+            socket.onclose = () => {
+                console.log("Socket closed.");
+            };
+        }
+    
+        function stopRecording() {
+            if (processor) processor.disconnect();
+            if (input) input.disconnect();
+            if (audioContext) audioContext.close();
+            if (stream) stream.getTracks().forEach(track => track.stop());
+            if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+    
+            status.textContent = 'Not Recording';
+            status.className = 'status not-recording';
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        }
+    
+        function convertFloat32ToInt16(buffer) {
+            let l = buffer.length;
+            const buf = new Int16Array(l);
+            while (l--) {
+                buf[l] = Math.min(1, buffer[l]) * 0x7FFF;
+            }
+            return buf.buffer;
+        }
+    
+        startButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
+    </script>
+    
+</body>
+</html> 
