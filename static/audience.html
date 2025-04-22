@@ -78,7 +78,7 @@
         let audioUnlocked = false;
 
         function setupWebSocket() {
-            ws = new WebSocket(`ws://${window.location.host}/ws/audience`);
+            ws = new WebSocket(`wss://${window.location.host}/ws/audience`);
             
             ws.onopen = () => {
                 connectionStatus.textContent = 'Connected to translation service';
